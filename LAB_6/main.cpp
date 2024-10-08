@@ -1,6 +1,6 @@
 #include <iostream>
 #include "Queue.h"
-using std::cin, std::cout, std::endl;
+using namespace std;
 
 int main() {
     unsigned int size, numDequeue;
