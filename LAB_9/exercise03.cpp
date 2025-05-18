@@ -1,270 +1,283 @@
 #include <SFML/Graphics.hpp>
 #include <SFML/Window.hpp>
+#include <iostream>
+#include <memory>
 
-using sf::CircleShape;
-using sf::Color;
-using sf::Event;
-using sf::FloatRect;
-using sf::Font;
-using sf::Keyboard;
-using sf::RectangleShape;
-using sf::RenderWindow;
-using sf::Text;
-using sf::Vector2f;
-using sf::VideoMode;
+// Forward declarations
+class GameObject;
+class Ball;
+class Paddle;
 
-class Ball
-{
-    Vector2f velocity;
-    CircleShape ball;
+// Constants
+namespace GameConfig {
+constexpr unsigned int WINDOW_WIDTH = 800;
+constexpr unsigned int WINDOW_HEIGHT = 600;
+constexpr unsigned int PADDLE_WIDTH = 80;
+constexpr unsigned int PADDLE_HEIGHT = 20;
+constexpr unsigned int BALL_RADIUS = 2;
+constexpr float BALL_SPEED = 3;
+constexpr float PADDLE_SPEED = 6;
+const sf::Color BALL_COLOR = sf::Color::White;
+const sf::Color PADDLE_COLOR = sf::Color::Green;
+const std::string WINDOW_TITLE = "Paddle Ball Game";
+} // namespace GameConfig
+
+// Base class for game objects
+class GameObject {
+protected:
+    sf::Vector2f position;
+    sf::Vector2f velocity;
 
 public:
-    Ball(int size, int x, int y) : ball(size), velocity(2, 2)
-    {
-        ball.setFillColor(Color::White);
-        ball.setPosition(x, y);
+    virtual ~GameObject() = default;
+    virtual void update() = 0;
+    virtual void draw(sf::RenderWindow &window) const = 0;
+    virtual sf::FloatRect getBounds() const = 0;
+
+    void setPosition(const sf::Vector2f &pos) {
+        position = pos;
+    }
+    const sf::Vector2f &getPosition() const {
+        return position;
+    }
+    void setVelocity(const sf::Vector2f &vel) {
+        velocity = vel;
+    }
+    const sf::Vector2f &getVelocity() const {
+        return velocity;
+    }
+};
+
+class Ball : public GameObject {
+private:
+    sf::CircleShape shape;
+    float radius;
+
+public:
+    explicit Ball(float radius) : radius(radius), shape(radius) {
+        shape.setFillColor(GameConfig::BALL_COLOR);
+        velocity = sf::Vector2f(GameConfig::BALL_SPEED, GameConfig::BALL_SPEED);
     }
 
-    Vector2f getPosition()
-    {
-        return ball.getPosition();
+    void update() override {
+        position += velocity;
+        shape.setPosition(position);
     }
 
-    float getRadius()
-    {
-        return ball.getRadius();
+    void draw(sf::RenderWindow &window) const override {
+        window.draw(shape);
     }
 
-    FloatRect getRect()
-    {
-        return ball.getGlobalBounds();
+    sf::FloatRect getBounds() const override {
+        return shape.getGlobalBounds();
     }
 
-    void bounceX()
-    {
+    void reverseX() {
         velocity.x = -velocity.x;
     }
-
-    void BounceDown()
-    {
-        velocity.y = abs(velocity.y);
-    }
-
-    void BounceUp()
-    {
+    void moveUp() {
         velocity.y = -abs(velocity.y);
     }
-
-    void move()
-    {
-        ball.move(velocity);
-    }
-
-    void draw(RenderWindow &window)
-    {
-        window.draw(ball);
-    }
-
-    void resetPosition(int x, int y)
-    {
-        ball.setPosition(x, y);
-        velocity = Vector2f(abs(velocity.x), abs(velocity.y));
+    void moveDown() {
+        velocity.y = abs(velocity.y);
     }
 };
 
-class Paddle
-{
-    RectangleShape paddle;
-    const unsigned int windowWidth;
+class Paddle : public GameObject {
+private:
+    sf::RectangleShape shape;
 
 public:
-    Paddle(int width, int height, int x, int y, unsigned int windowWidth) : paddle(Vector2f(width, height)), windowWidth(windowWidth)
-    {
-        paddle.setFillColor(Color::Green);
-        paddle.setPosition(x, y);
+    Paddle(float width, float height) : shape(sf::Vector2f(width, height)) {
+        shape.setFillColor(GameConfig::PADDLE_COLOR);
+        velocity = sf::Vector2f(GameConfig::PADDLE_SPEED, 0);
     }
 
-    void moveLeft()
-    {
-        paddle.move(-3, 0);
-        if (paddle.getPosition().x + paddle.getSize().x < 0)
-        {
-            paddle.setPosition(windowWidth, paddle.getPosition().y);
+    void update() override {
+        shape.setPosition(position);
+    }
+
+    void draw(sf::RenderWindow &window) const override {
+        window.draw(shape);
+    }
+
+    sf::FloatRect getBounds() const override {
+        return shape.getGlobalBounds();
+    }
+
+    void moveLeft() {
+        if (position.x > 0) {
+            position.x -= velocity.x;
         }
     }
 
-    void moveRight()
-    {
-        paddle.move(3, 0);
-        if (paddle.getPosition().x > windowWidth)
-        {
-            paddle.setPosition(-paddle.getSize().x, paddle.getPosition().y);
+    void moveRight() {
+        if (position.x + shape.getSize().x < GameConfig::WINDOW_WIDTH) {
+            position.x += velocity.x;
         }
-    }
-
-    void draw(RenderWindow &window)
-    {
-        window.draw(paddle);
-    }
-
-    FloatRect getRect()
-    {
-        return paddle.getGlobalBounds();
-    }
-
-    void resetPosition(int x, int y)
-    {
-        paddle.setPosition(x, y);
     }
 };
 
-class PaddleBallGame
-{
-    const unsigned int windowWidth;
-    const unsigned int windowHeight;
-    const unsigned int paddleWidth;
-    const unsigned int paddleHeight;
-    const unsigned int ballR;
-    const unsigned int ballX;
-    const unsigned int ballY;
-    RenderWindow window;
+class GameState {
+public:
+    enum class State {
+        Playing,
+        GameOver,
+        Paused
+    };
+
+private:
+    State currentState;
+    unsigned int score;
+
+public:
+    GameState() : currentState(State::Playing), score(0) {
+    }
+
+    void setState(State state) {
+        currentState = state;
+    }
+    State getState() const {
+        return currentState;
+    }
+    void incrementScore() {
+        ++score;
+    }
+    unsigned int getScore() const {
+        return score;
+    }
+    void reset() {
+        score = 0;
+        currentState = State::Playing;
+    }
+};
+
+class Game {
+private:
+    sf::RenderWindow window;
     Ball ball;
     Paddle paddle;
-    Font font;
-    Text gameOverText;
-    bool isGameOver;
+    sf::Font font;
+    sf::Text gameOverText;
+    sf::Text scoreText;
+    GameState gameState;
 
-    inline bool collisionWithWalls()
-    {
-        const float x = ball.getPosition().x;
-        return x <= 0 || x + ball.getRadius() * 2 >= windowWidth;
+    void initializeText() {
+        if (!font.loadFromFile("Arial.ttf")) {
+            throw std::runtime_error("Could not load font!");
+        }
+
+        gameOverText.setFont(font);
+        gameOverText.setString("Game Over! Press Space to Continue");
+        gameOverText.setCharacterSize(24);
+        gameOverText.setFillColor(sf::Color::Red);
+        gameOverText.setPosition(GameConfig::WINDOW_WIDTH / 2 - gameOverText.getGlobalBounds().width / 2,
+                                 GameConfig::WINDOW_HEIGHT / 2);
+
+        scoreText.setFont(font);
+        scoreText.setCharacterSize(20);
+        scoreText.setFillColor(sf::Color::White);
+        scoreText.setPosition(10, 10);
     }
 
-    inline bool collisionWithTop()
-    {
-        return ball.getPosition().y <= 0;
+    void handleInput() {
+        if (gameState.getState() == GameState::State::Playing) {
+            if (sf::Keyboard::isKeyPressed(sf::Keyboard::Left))
+                paddle.moveLeft();
+
+            if (sf::Keyboard::isKeyPressed(sf::Keyboard::Right))
+                paddle.moveRight();
+        } else if (gameState.getState() == GameState::State::GameOver) {
+            if (sf::Keyboard::isKeyPressed(sf::Keyboard::Space))
+                resetGame();
+        }
     }
 
-    inline bool collisionWithBottom()
-    {
-        return ball.getPosition().y + ball.getRadius() * 2 >= windowHeight;
+    void updateGame() {
+        if (gameState.getState() != GameState::State::Playing)
+            return;
+
+        ball.update();
+        paddle.update();
+
+        // Ball collision with walls
+        if (ball.getPosition().x <= 0 || ball.getPosition().x + ball.getBounds().width >= GameConfig::WINDOW_WIDTH) {
+            ball.reverseX();
+        }
+
+        // Ball collision with ceiling
+        if (ball.getPosition().y <= 0)
+            ball.moveDown();
+
+        // Ball collision with paddle
+        if (ball.getBounds().intersects(paddle.getBounds())) {
+            ball.moveUp();
+            gameState.incrementScore();
+        }
+
+        // Ball below paddle
+        if (ball.getPosition().y + ball.getBounds().height >= GameConfig::WINDOW_HEIGHT) {
+            gameState.setState(GameState::State::GameOver);
+        }
+
+        // Update score text
+        scoreText.setString("Score: " + std::to_string(gameState.getScore()));
     }
 
-    inline bool leftKeyPressed() { return Keyboard::isKeyPressed(sf::Keyboard::Left); }
-    inline bool rightKeyPressed() { return Keyboard::isKeyPressed(sf::Keyboard::Right); }
+    void render() {
+        window.clear(sf::Color::Black);
 
-    void updateAndRender()
-    {
-        window.clear();
-        paddle.draw(window);
         ball.draw(window);
-        if (isGameOver)
-        {
+        paddle.draw(window);
+        window.draw(scoreText);
+
+        if (gameState.getState() == GameState::State::GameOver) {
             window.draw(gameOverText);
         }
+
         window.display();
     }
 
-    bool collissionWithPaddle()
-    {
-        FloatRect ballRect = ball.getRect();
-        FloatRect paddleRect = paddle.getRect();
-        return ballRect.intersects(paddleRect);
-    }
-
-    void gameOver()
-    {
-        isGameOver = true;
-    }
-
-    void resetGame()
-    {
-        ball.resetPosition(ballX, ballY);
-        paddle.resetPosition(windowWidth / 2, windowHeight - paddleHeight);
-        isGameOver = false;
+    void resetGame() {
+        ball.setPosition(sf::Vector2f(GameConfig::WINDOW_WIDTH / 2, GameConfig::WINDOW_HEIGHT / 2));
+        paddle.setPosition(sf::Vector2f(GameConfig::WINDOW_WIDTH / 2 - GameConfig::PADDLE_WIDTH / 2,
+                                        GameConfig::WINDOW_HEIGHT - GameConfig::PADDLE_HEIGHT * 2));
+        gameState.reset();
     }
 
 public:
-    PaddleBallGame(
-        const unsigned int windowWidth,
-        const unsigned int windowHeight) : windowWidth(400),
-                                           windowHeight(300),
-                                           paddleWidth(80),
-                                           paddleHeight(20),
-                                           ballR(20),
-                                           ballX(100),
-                                           ballY(100),
-                                           window(VideoMode(windowWidth, windowHeight), "Bouncing Ball"),
-                                           ball(ballR, ballX, ballY),
-                                           paddle(paddleWidth, paddleHeight, windowWidth / 2, windowHeight - paddleHeight, windowWidth),
-                                           isGameOver(false)
-    {
+    Game()
+        : window(sf::VideoMode(GameConfig::WINDOW_WIDTH, GameConfig::WINDOW_HEIGHT), GameConfig::WINDOW_TITLE),
+          ball(GameConfig::BALL_RADIUS), paddle(GameConfig::PADDLE_WIDTH, GameConfig::PADDLE_HEIGHT) {
         window.setFramerateLimit(60);
-
-        font.loadFromFile("Arial.ttf");
-        gameOverText.setFont(font);
-        gameOverText.setString("Game Over! Press Space to Continue");
-        gameOverText.setCharacterSize(20);
-        gameOverText.setFillColor(Color::Red);
-        gameOverText.setPosition(windowWidth / 2 - gameOverText.getGlobalBounds().width / 2, windowHeight / 2);
-
-        ball.draw(window);
-        paddle.draw(window);
-        window.display();
+        initializeText();
+        resetGame();
     }
 
-    void play()
-    {
-        while (window.isOpen())
-        {
-            Event event;
-            while (window.pollEvent(event))
-            {
-                if (event.type == Event::Closed)
+    void run() {
+        while (window.isOpen()) {
+            sf::Event event;
+            while (window.pollEvent(event)) {
+                if (event.type == sf::Event::Closed) {
                     window.close();
-            }
-
-            if (isGameOver)
-            {
-                if (Keyboard::isKeyPressed(Keyboard::Space))
-                {
-                    resetGame();
                 }
             }
-            else
-            {
-                if (collisionWithWalls())
-                    ball.bounceX();
 
-                else if (collisionWithTop())
-                    ball.BounceDown();
-
-                else if (collissionWithPaddle())
-                    ball.BounceUp();
-
-                else if (collisionWithBottom())
-                {
-                    ball.BounceUp();
-                    gameOver();
-                }
-
-                ball.move();
-
-                if (leftKeyPressed())
-                    paddle.moveLeft();
-
-                if (rightKeyPressed())
-                    paddle.moveRight();
-            }
-
-            updateAndRender();
+            handleInput();
+            updateGame();
+            render();
         }
     }
 };
 
-int main()
-{
-    PaddleBallGame game(400, 300);
-    game.play();
+int main() {
+    try {
+        Game game;
+        game.run();
+
+    } catch (const std::exception &e) {
+        std::cerr << "Error: " << e.what() << std::endl;
+        return 1;
+    }
     return 0;
 }
